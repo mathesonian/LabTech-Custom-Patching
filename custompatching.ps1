@@ -159,6 +159,29 @@
 ##########################################################################
 #Function Declarations
 
+Function SendTo-LogEntries
+{
+    Param
+    (
+		[Parameter(Mandatory = $true,Position = 0)]
+		[STRING]$Token,
+		[Parameter(Mandatory = $true,Position = 0)]
+		[STRING]$Message   
+    )
+    $tcpConnection = New-Object System.Net.Sockets.TcpClient('data.logentries.com', '80')
+    $tcpStream = $tcpConnection.GetStream()
+    $reader = New-Object System.IO.StreamReader($tcpStream)
+    $writer = New-Object System.IO.StreamWriter($tcpStream)
+    $writer.AutoFlush = $true
+    $buffer = new-object System.Byte[] 1024
+    $encoding = new-object System.Text.AsciiEncoding 
+    $writer.WriteLine("$Token $Message")
+    write-output "$Token $Message"
+    $reader.Close()
+    $writer.Close()
+    $tcpConnection.Close()
+}
+
 Function Create-InsertStatement
 {
     <#
@@ -222,11 +245,11 @@ Insert into `Plugin_Patching_Data`
     $MySQLInsert = $Columns -f $computerID, $kbid, $Title, $Cat, $Desc, $Guid, $Sev, $Res, $Hres, $HresDesc, 'NOW()'
 
     Add-Content -Path $SqlInsertsPath -Value $MySQLInsert
-	Write-Log -Message "Insert Statement for KB $($Kbid) added." -Severity 1
+	SendTo-LogEntries -Token $Token -Message "Insert Statement for KB $($Kbid) added."
 	
 	If(!(Test-Path -Path $SqlInsertsPath))
 	{
-		Write-Log -Message "SQL Insert Filepath is innacessible. Exiting script." -Severity
+		SendTo-LogEntries -Token $Token -Message "SQL Insert Filepath is innacessible. Exiting script."
 		End-Script -Result "Path Failure"
 	}
 }
@@ -313,13 +336,9 @@ Function End-Script
 		[parameter(Mandatory = $true)]
 		[String]$Result
 	)
-	$Mystuff = Get-UserVariables
-	Out-File -InputObject $MyStuff -FilePath $OutVarPath
 	Out-File -InputObject $Error -FilePath $ErrorPath
 	Out-File -InputObject $Result -Filepath $ResultsPath
-	Write-Log ("********************************")
-	Write-Log ("***** $($ScriptName) Ends *****")
-	Write-Log ("********************************")
+    SendTo-LogEntries -Token $Token -Message"***** $($ScriptName) Ends *****"
 	exit;
 }
 
@@ -398,26 +417,6 @@ function Get-HresultDescription
 	[String]$Hresultcode = ([regex]::matches($Webresult, $regex)).groups[1].value
 	
 	Return [String]$Hresultcode
-}
-
-Function Get-UserVariables
-{
-	
-		<#
-	.SYNOPSIS
-		A function to gather a list of all user variables in the powershell script..
-	
-	.DESCRIPTION
-		This function will exclude all variables that are NOT user created.
-	
-	.EXAMPLE
-		PS C:\> Get-UserVariables
-	
-	.NOTES
-		N/A
-#>
-	
-	Compare-Object (Get-Variable) $AutomaticVariables -Property Name -PassThru | Where -Property Name -ne "AutomaticVariables"
 }
 
 function Process-Update
@@ -502,66 +501,13 @@ function Set-UpdateTypeID
 	Return [INT]$UpdateID
 }
 
-Function Write-Log
-{
-	<#
-	.SYNOPSIS
-		A function to write ouput messages to a logfile.
-	
-	.DESCRIPTION
-		This function is designed to send timestamped messages to a logfile of your choosing.
-		Use it to replace something like write-host for a more long term log.
-	
-	.PARAMETER StrMessage
-		The message being written to the log file.
-	
-	.PARAMETER Severity
-		The label assigned to that log message line. Options are "Note", "Warning", and "Problem"
-	
-	.EXAMPLE
-		PS C:\> Write-Log -StrMessage 'This is a note message being written out to the log.' -Severity 1
-		PS C:\> Write-Log -StrMessage 'This is a warning message being written out to the log.' -Severity 2
-		PS C:\> Write-Log -StrMessage 'This is a error message being written out to the log.' -Severity 3
-		PS C:\> Write-Log -StrMessage 'This message being written has no severity.'
-	
-	.NOTES
-		N/A
-#>
-	
-	Param
-		(
-		[Parameter(Mandatory = $True, Position = 0)]
-		[String]$Message,
-		[Parameter(Mandatory = $False, Position = 1)]
-		[INT]$Severity
-	)
-	
-	$Note = "[NOTE]"
-	$Warning = "[WARNING]"
-	$Problem = "[ERROR]"
-	[string]$Date = get-date
-	
-	switch ($Severity)
-	{
-		1 { add-content -path $LogFilePath -value ($Date + "`t:`t" + $Note + $Message) }
-		2 { add-content -path $LogFilePath -value ($Date + "`t:`t" + $Warning + $Message) }
-		3 { add-content -path $LogFilePath -value ($Date + "`t:`t" + $Problem + $Message) }
-		default { add-content -path $LogFilePath -value ($Date + "`t:`t" + $Message) }
-	}
-	
-	
-}
-
 ##########################################################################
 #Variable Declarations
 
 $ErrorActionPreference = 'SilentlyContinue'
-[Object]$AutomaticVariables = Get-Variable
 [String]$Computerid = "@ComputerID@"
-[String]$ErrorPath = "$($env:windir)\temp\PatchingAutomationERRORS.txt"
 [String]$Filter = 'IsInstalled = 0 and IsHidden=0'
-[String]$LogFilePath = "$($env:windir)\temp\PatchingAutomationLOG.txt"
-[String]$OutVarPath = "$($env:windir)\temp\PatchingAutomationVARS.txt"
+[String]$ErrorPath = "$($env:windir)\temp\PatchingAutomationERRORS.txt"
 [String]$ResultsPath = "$($env:windir)\temp\PatchingAutomationRESULTS.txt"
 [String]$ScriptName = 'Custom Patching'
 [String]$SqlInsertsPath = "$($env:windir)\temp\sqlinserts.txt"
@@ -571,33 +517,23 @@ $ErrorActionPreference = 'SilentlyContinue'
 [String]$strWantedCategoryIDs = ""
 [Array]$arrExcludedKBs = @($strExcludedKBs)
 [Array]$WantedUpdateTypeIDs = @(0, 4, 5, 7, 8, 9)
+[String]$Token = 'e119e037-16d0-4a5f-aa70-ded70a6682e5'
 
 ##########################################################################
 #Pre-Patch Checks
 
-Write-Log ("********************************")
-Write-Log ("**** $($ScriptName) Begins ****")
-Write-Log ("********************************")
-Write-Log -Message "Pre-Patching checks begin. Removing all old files from previous runs." -Severity
+SendTo-LogEntries -Token $Token -Message "**** $($ScriptName) Begins ****"
+SendTo-LogEntries -Token $Token -Message "Computer: $env:COMPUTERNAME"
+SendTo-LogEntries -Token $Token -Message "OS:       $((Get-WmiObject Win32_OperatingSystem).caption)"
 
-IF (Test-Path $ErrorPath)		{Remove-Item $ErrorPath}
-IF (Test-Path $OutVarPath) 		{Remove-Item $OutVarPath}
-IF (Test-Path $ResultsPath) 	{Remove-Item $ResultsPath}
-IF (Test-Path $SqlInsertsPath)	{Remove-Item $SqlInsertsPath}
+IF (Test-Path $ErrorPath -ErrorAction SilentlyContinue)		 {Remove-Item $ErrorPath -Force}
+IF (Test-Path $OutVarPath -ErrorAction SilentlyContinue) 	 {Remove-Item $OutVarPath -Force}
+IF (Test-Path $ResultsPath -ErrorAction SilentlyContinue) 	 {Remove-Item $ResultsPath -Force}
+IF (Test-Path $SqlInsertsPath -ErrorAction SilentlyContinue) {Remove-Item $SqlInsertsPath -Force}
 
 $FreeSpace = (Get-WmiObject -class win32_LogicalDisk -filter "Name = 'C:'").freespace
 $FreespaceMB = "{0:n2}" -f ($Freespace/1MB)
-Write-Log -Message "Freespace before patching (in Megabytes) : $FreeSpaceMB" -Severity 1
-
-$objSystemInfo = New-Object -ComObject "Microsoft.Update.SystemInfo"
-
-<#If ($objSystemInfo.RebootRequired -eq $True)
-{
-	Write-Log -Message "A Reboot is Required. Patching cannot continue in this state." -Severity 3
-	End-Script -Result "Reboot Needed"
-}
-#>
-Write-Log -Message "No Reboot is Required. Patching can continue." -Severity 1
+SendTo-LogEntries -Token $Token -Message "Freespace before patching (in Megabytes) : $FreeSpaceMB"
 
 ##########################################################################
 #Define Pre Search Filters
@@ -607,12 +543,12 @@ if ($strwantedcategoryids)
 	$filter = $filter + " and CategoryIDs contains " + $strWantedCategoryIDs
 }
 
-Write-Log -Message "Pre-Patch filter is : $filter" -Severity 1
+SendTo-LogEntries -Token $Token -Message "Pre-Patch filter is : $filter"
 
 ##########################################################################
 #Get all available updates
 
-Write-Log -Message "Beginning Search to Gather Updates." -Severity 1
+SendTo-LogEntries -Token $Token -Message "Beginning Search to Gather Updates."
 $Start = Get-Date
 $objSession = New-Object -com "Microsoft.Update.Session"
 $objSearcher = $objSession.CreateUpdateSearcher()
@@ -620,58 +556,69 @@ $serviceName = "Windows Update"
 $SearchResults = $objSearcher.Search("$filter")
 $End = Get-Date
 $SearchTimespan = new-timespan -Start $start -End $end
-Write-Log -Message "Update Search Completed. Time taken was $($Searchtimespan.totalseconds) seconds" -Severity 1
-Write-Log -message "There are $($SearchResults.Updates.Count) Total updates available." -severity 1
+SendTo-LogEntries -Token $Token -Message "Update Search Completed. Time taken was $($Searchtimespan.totalseconds) seconds"
+SendTo-LogEntries -Token $Token -Message "There are $($SearchResults.Updates.Count) Total updates available."
 
 If ($SearchResults.Updates.Count -eq 0)
 {
-	Write-Log -Message "Script has determined that no patches are required." -Severity 1
+	SendTo-LogEntries -Token $Token -Message "Script has determined that no patches are required."
 	End-Script -Result "No Patches Needed"
 }
 
 ##########################################################################
 #Download all the Updates
 
-Write-Log -Message "Beginning download of all updates..." -Severity 1
+SendTo-LogEntries -Token $Token -Message "Beginning download of all updates..."
 $Start = Get-Date
 $Downloader = $objSession.CreateUpdateDownloader()
 $Downloader.updates = $SearchResults.updates
 $DownloadResults = $Downloader.Download()
 $End = Get-Date
 $DownloadTimespan = new-timespan -Start $start -End $end
-Write-Log -Message "Downloads Completed.Time taken $Downloadtimespan.totalseconds" -Severity 1
-Write-Log -Message "Download Results were : $($DownloadResults.ResultCode)" -Severity 1
+SendTo-LogEntries -Token $Token -Message "Downloads Completed.Time taken $Downloadtimespan.totalseconds"
 
 If ($DownloadResults.resultcode -ne 2)
 {
-    Write-Log -Message "Patch Downloading failed for one or more patches. We are still going to attempt to patch but results may not be great." -Severity 2
+    SendTo-LogEntries -Token $Token -Message "Download Results were: Downloading failed for one or more patches."
+}
+
+Else
+{
+    SendTo-LogEntries -Token $Token -Message "Download Results were: All Patches Downloaded Successfully."
 }
 
 
 ##########################################################################
 #Install the desired updates
 
+[INT]$Count = 1
+
 foreach ($Update in $Searchresults.updates)
 {
+
+   SendTo-LogEntries -Token $Token -Message "Processing Update $Count of $($SearchResults.Updates.Count)" 
+
 	If ($arrExcludedKBs -contains $update.KB)
 	{
-		Write-Log -Message "KB $($Update.kb) was excluded." -Severity 2;
+		SendTo-LogEntries -Token $Token -Message "KB $($Update.kb) was excluded."
 	}
 	
 	Else
 	{
-		Write-Log -Message "Installing KB: $($Update.kbarticleids)" -Severity 1
+		SendTo-LogEntries -Token $Token -Message "KB ID: $($Update.kbarticleids)"
+        SendTo-LogEntries -Token $Token -Message "KB Title: $($Update.title)"
+        SendTo-LogEntries -Token $Token -Message "KB Type: $($Update.type)"
 		$InstallResult = Process-Update $Update
 		$ParsedInstallResult = Determine-Result -InstallResult $Installresult
-		Write-Log -Message "Result was: $($ParsedInstallResult.installresult)" -Severity 1
+		SendTo-LogEntries -Token $Token -Message "Result was: $($ParsedInstallResult.installresult)"
 		
 		foreach ($Property in $Update.psobject.properties)
 		{
 			$Property.Value = Format-SanitizedString $Property.Value
 		}
-		
-		Create-InsertStatement -update $update -Results $ParsedInstallResult
 	}
+
+    [INT]$Count++
 }
 
 ##########################################################################
@@ -679,12 +626,12 @@ foreach ($Update in $Searchresults.updates)
 
 If ($objSystemInfo.RebootRequired -eq $True)
 {
-	Write-Log -Message "Script completed successfully but a reboot is required." -Severity 1
+	SendTo-LogEntries -Token $Token -Message "Script completed successfully but a reboot is required."
 	End-Script -Result "Success -r"
 }
 
 Else
 {
-	Write-Log -Message "Script completed successfully and a reboot is not required." -Severity 1
+	SendTo-LogEntries -Token $Token -Message "Script completed successfully and a reboot is not required."
 	End-Script -Result "Success"
 }
