@@ -109,7 +109,7 @@ Function Zip-Actions
 
 $LogFilePath = "$Env:windir\temp\script.txt"
 
-#region Do Windows Patching
+#Do Windows Patching
 ######################################
 
 Write-Log "***Windows Patching BEGINS***"
@@ -142,13 +142,13 @@ $PatchingProcess = Get-WUInstall -MicrosoftUpdate -IgnoreUserInput -AcceptAll -I
 
 If($PatchingProcess)
 {
-    Write-Log "$($PatchingProcess | FT | Out-String)"
+    Write-log "$($PatchingProcess | FT | Out-String)"
 }
 
 Else
 {
-    Write-Log "No Patches Needed."
+    Return "No Patches Needed."
 }
 
-Write-Log "Windows Patching Complete!"
-#endregion
+Return "Windows Patching Complete!"
+
