@@ -117,6 +117,7 @@ Write-Log "#############################"
 
 $Source = ‘https://s3.amazonaws.com/ltpremium/modules/PSWindowsUpdate.zip’
 $Destination = “$env:temp\PSWindowsUpdate.zip”
+$UnzipPath = "$env:windir\System32\WindowsPowerShell\v1.0\Modules\"
 
 Write-Log "Downloading Windows Update PowerShell Module"
 
@@ -125,7 +126,7 @@ Unblock-File $Destination
 
 Write-Log "Unzipping Windows Update PowerShell Module"
 
-Zip-Actions -ZipPath $Destination -FolderPath "$env:windir\System32\WindowsPowerShell\v1.0\Modules\" -Unzip $true -DeleteZip $true | Out-Null;
+Zip-Actions -ZipPath $Destination -FolderPath $UnzipPath -Unzip $true -DeleteZip $true | Out-Null;
 
 Write-Log "Importing Windows Update PowerShell Module"
 
